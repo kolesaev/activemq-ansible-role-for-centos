@@ -1,0 +1,78 @@
+---
+
+
+# остановка сервиса activemq, если он существует
+- name: Stop old activemq.service
+  service:
+    name: activemq
+    state: stopped
+    enabled: no
+  when: srv_file.stat.exists
+  # вызов обработчика для перезапуска systemctl
+  notify:
+    - restart_systemctl
+
+# удаление старой папки activemq из папки /opt, если она существует
+- name: Remove {{ activemq_folder }} folder
+  file:
+    path: "{{ activemq_folder }}"
+    state: absent
+  when: opt_activemq_folder.stat.exists
+
+# перемещение распакованного activemq в папку /opt
+- name: Move move unpacked folder
+  shell: "mv {{ unpacked_activemq }} {{ activemq_folder }}"
+
+# назначение прав на файлы activemq только для user
+- name: Change owner for activemq folder
+  file:
+    dest: "{{ activemq_folder }}"
+    owner: "{{ activemq_user }}"
+    group: "{{ activemq_user }}"
+    mode: 0774
+    recurse: yes
+
+# разрешение запуска исполняемого файла activemq
+- name: Allow bin execution
+  file:
+    dest: "{{ activemq_folder }}/bin/activemq"
+    mode: a+x
+  
+# замена activemq.xml из шаблона с учётом переменных
+- name: Replace activemq.xml
+  template:
+    src: templates/activemq.xml.j2
+    dest: "{{ activemq_folder }}/conf/activemq.xml"
+    owner: "{{ activemq_user }}"
+    group: "{{ activemq_user }}"
+    mode: 0774
+  
+# замена jetty.xml из шаблона с учётом переменных
+- name: Replace jetty.xml
+  template:
+    src: templates/jetty.xml.j2
+    dest: "{{ activemq_folder }}/conf/jetty.xml"
+    owner: "{{ activemq_user }}"
+    group: "{{ activemq_user }}"
+    mode: 0774
+
+# удаление старой конфигурации сервиса, если она существует
+- name: Remove old activemq.service
+  file:
+    path: "{{ service_file }}"
+    state: absent
+  when: srv_file.stat.exists
+  # вызов обработчика для перезапуска systemctl
+  notify:
+    - restart_systemctl
+  
+# добавление новой конфигурации сервиса
+- name: Adding new activemq.service
+  template:
+    src: templates/activemq.service.j2
+    dest: "{{ service_file }}"
+    owner: "root"
+    mode: 0644
+  # вызов обработчика для перезапуска systemctl
+  notify:
+    - restart_systemctl
